@@ -1,5 +1,6 @@
 from PIL import Image
 import numpy as np
+import math
 
 def load_image(path: str, width: int, height: int):
   """
@@ -62,29 +63,106 @@ def normalize_kernel(kernel: np.ndarray) -> np.ndarray:
   if np.min(kernel) < 0: raise ValueError("Kernel with negative values cannot be normalized.")
   return kernel / np.sum(kernel)
 
-
-def convolve(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+def convolve(image: np.ndarray, kernel: np.ndarray, stride: tuple[int, int] = (1, 1)) -> np.ndarray:
   """
-  Performs 2D convolution of an image with a kernel.
+  Performs 2D convolution of an image with a kernel, respecting stride.
 
   Args:
     image: A 2D NumPy array representing the input image.
     kernel: A 2D NumPy array representing the convolution kernel.
+    stride: A tuple with two integers representing the stride (stride_x, stride_y) of the convolution.
 
   Returns:
     A 2D NumPy array representing the convolved image.
   """
   image_height, image_width = image.shape
   kernel_height, kernel_width = kernel.shape
-  padding_height, padding_width = kernel_height // 2, kernel_width // 2
+  stride_x, stride_y = stride
 
-  padded_image = np.pad(image, ((padding_height, padding_height), (padding_width, padding_width)), mode='constant')
-  output_image = np.zeros(image.shape, dtype=image.dtype)
+  output_height = math.ceil(image_height / stride_y)
+  if output_height * stride_y > image_height: output_height -= 1
+  output_width = math.ceil(image_width / stride_x)
+  if output_width * stride_x > image_width: output_width -= 1
+  output_image = np.zeros((output_height, output_width), dtype=image.dtype)
 
-  for y in range(image_height):
-    for x in range(image_width):
-      region = padded_image[y:y + kernel_height, x:x + kernel_width]
-      output_image[y, x] = np.sum(region * kernel)
+  padding_height = (kernel_height // 2, output_height * stride_y + kernel_height - image_height - kernel_height // 2)
+  padding_width = (kernel_width // 2, output_width * stride_x + kernel_width - image_width - kernel_width // 2)
+  padded_image = np.pad(image, (padding_height, padding_width), mode='constant', constant_values=0)
+
+  for out_y in range(output_height):
+    for out_x in range(output_width):
+      in_y = out_y * stride_y
+      in_x = out_x * stride_x
+      region = padded_image[in_y : in_y + kernel_height, in_x : in_x + kernel_width]
+      output_image[out_y, out_x] = np.sum(region * kernel)
+
+  print(output_image.shape)
+  return output_image
+
+def normalize_kernel_rc(kernel_xy: tuple[np.ndarray, np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+  """
+  Normalizes a convolution kernel by dividing each element by the sum of all elements.
+
+  Args:
+    kernel: A 2D NumPy array representing the convolution kernel.
+
+  Returns:
+    A 2D NumPy array representing the normalized convolution kernel.
+  """
+  kernel_x, kernel_y = kernel_xy
+  if np.min(kernel_x[0]) < 0 or np.min(kernel_y[0]) < 0: raise ValueError("Kernel with negative values cannot be normalized.")
+  sum = math.sqrt(np.sum(kernel_x * kernel_y.reshape(-1, 1)))
+  return (kernel_x / sum, kernel_y / sum)
+
+def convolve_rc(image: np.ndarray, kernel_xy: tuple[np.ndarray, np.ndarray], stride: tuple[int, int] = (1, 1)) -> np.ndarray:
+  """
+  Performs 2D separable convolution using a row and column kernel, respecting stride.
+
+  Convolution is performed first along rows (with kernel_x and stride_x),
+  then along columns (with kernel_y and stride_y).
+
+  Args:
+    image: A 2D NumPy array representing the input image.
+    kernel_xy: A tuple containing two 1D NumPy arrays (kernel_x, kernel_y) representing the row and column convolution kernels.
+    stride: A tuple with two integers representing the stride (stride_x, stride_y) of the convolution.
+
+  Returns:
+    A 2D NumPy array representing the convolved image.
+  """
+  kernel_x, kernel_y = kernel_xy
+
+  if kernel_y.ndim != 1 or kernel_x.ndim != 1:
+    raise ValueError("Kernels in kernel_xy must be 1D arrays.")
+
+  image_height, image_width = image.shape
+  kernel_height, kernel_width = kernel_y.shape[0], kernel_x.shape[0]
+  stride_x, stride_y = stride
+
+  output_height = math.ceil(image_height / stride_y)
+  if output_height * stride_y > image_height: output_height -= 1
+  output_width = math.ceil(image_width / stride_x)
+  if output_width * stride_x > image_width: output_width -= 1
+  output_image = np.zeros((output_height, output_width), dtype=image.dtype)
+
+  padding_height = (kernel_height // 2, output_height * stride_y + kernel_height - image_height - kernel_height // 2)
+  padding_width = (kernel_width // 2, output_width * stride_x + kernel_width - image_width - kernel_width // 2)
+  padded_image = np.pad(image, ((0, 0), padding_width), mode='constant', constant_values=0)
+
+  intermediate_image = np.zeros((image_height + padding_height[0] + padding_height[1], output_width), dtype=image.dtype)
+
+  for y in range(image_height): # Iterate through each row
+    for out_x in range(output_width): # Iterate through output columns
+      in_x = out_x * stride_x
+      region = padded_image[y: y + 1, in_x: in_x + kernel_width]
+      intermediate_image[y + padding_height[0], out_x] = np.sum(region * kernel_x)
+
+  kernel_y = kernel_y.reshape(-1, 1)
+  print(padding_width, padding_height)
+  for x in range (output_width):
+    for out_y in range(output_height):
+      in_y = out_y * stride_y
+      region = intermediate_image[in_y: in_y + kernel_height, x: x + 1]
+      output_image[out_y, x] = np.sum(region * kernel_y)
 
   return output_image
 
@@ -92,41 +170,30 @@ def _test_load_image():
   """
   Tests the load_image function.
   """
-  img = load_image('../dataset/0/Zero_full (1).jpg', 50, 50)
+  img = load_image('../datasets/panghalvishesh handwritten-digit/0/Zero_full (1).jpg', 50, 50)
   print_image(img)
 
 def _test_convolve():
   """
   Tests the convolve function.
   """
-  img = load_image('../dataset/0/Zero_full (1).jpg', 50, 50)
+  img = load_image('../datasets/panghalvishesh handwritten-digit/0/Zero_full (1).jpg', 50, 50)
 
   print("Blurred image")
   print_image(
     convolve(img, normalize_kernel(np.array([
-      [1, 1, 1, 1],
-      [1, 1, 1, 1],
-      [1, 1, 1, 1],
-      [1, 1, 1, 1],
+      [1, 2, 1],
+      [2, 4, 2],
+      [1, 2, 1],
     ])))
   )
 
-  print("Horizontal Edge Detection")
+  print("Blurred image rc")
   print_image(
-    convolve(img, np.array([
-      [-1,-2,-1],
-      [ 0, 0, 0],
-      [ 1, 2, 1],
-    ]))
-  )
-
-  print("Vertical Edge Detection")
-  print_image(
-    convolve(img, np.array([
-      [-1, 0, 1],
-      [-2, 0, 2],
-      [-1, 0, 1],
-    ]))
+    convolve_rc(img, normalize_kernel_rc((
+      np.array([1, 2, 1]),
+      np.array([1, 2, 1])
+    )))
   )
 
 if __name__ == '__main__':
