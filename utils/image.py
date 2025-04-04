@@ -200,3 +200,37 @@ if __name__ == '__main__':
   _test_load_image()
   _test_convolve()
 
+import gzip
+import struct
+
+def load_mnist_images(filename):
+  """Loads the MNIST images from a gzipped file using struct."""
+  with gzip.open(filename, 'rb') as f:
+    magic, num, rows, cols = struct.unpack(">IIII", f.read(16))
+    if magic != 2051: raise ValueError('Magic number mismatch in image file: expected 2051, got {}'.format(magic))
+    images = np.frombuffer(f.read(), dtype=np.uint8).reshape(num, rows, cols)
+  return images
+
+def load_mnist_labels(filename):
+  """Loads the MNIST labels from a gzipped file using struct."""
+  with gzip.open(filename, 'rb') as f:
+    magic, num = struct.unpack(">II", f.read(8))
+    if magic != 2049:
+      raise ValueError('Magic number mismatch in label file: expected 2049, got {}'.format(magic))
+    labels = np.frombuffer(f.read(), dtype=np.uint8)
+  return labels
+
+def _test_load_mnist_images():
+  """
+  Tests the load_mnist_images function.
+  """
+  images = load_mnist_images('../datasets/mnist/t10k-images.idx3-ubyte.gz')
+  labels = load_mnist_labels('../datasets/mnist/t10k-labels.idx1-ubyte.gz')
+  print(images.shape)
+  print(labels.shape)
+
+  print("Image of", labels[0])
+  print_image(images[0])
+
+if __name__ == '__main__':
+  _test_load_mnist_images()
