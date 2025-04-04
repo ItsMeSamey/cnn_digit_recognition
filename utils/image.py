@@ -104,7 +104,7 @@ def normalize_kernel_rc(kernel_xy: tuple[np.ndarray, np.ndarray]) -> tuple[np.nd
   Normalizes a convolution kernel by dividing each element by the sum of all elements.
 
   Args:
-    kernel: A 2D NumPy array representing the convolution kernel.
+    kernel_xy: A tuple containing two 1D NumPy arrays (kernel_x, kernel_y) representing the row and column convolution kernels.
 
   Returns:
     A 2D NumPy array representing the normalized convolution kernel.
