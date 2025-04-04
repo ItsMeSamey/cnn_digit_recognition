@@ -1,8 +1,7 @@
+from abc import ABCMeta, abstractmethod
 from PIL import Image
 import numpy as np
 import math
-
-from utils.cnn import ImageIterator
 
 def load_image(path: str, width: int, height: int):
   """
@@ -237,6 +236,24 @@ def _test_load_mnist_images():
 if __name__ == '__main__':
   _test_load_mnist_images()
 
+
+class ImageIterator(metaclass=ABCMeta):
+  @abstractmethod
+  def has_next(self) -> bool:
+    raise NotImplementedError
+
+  @abstractmethod
+  def next(self) -> tuple[np.ndarray, int]:
+    raise NotImplementedError
+
+  @abstractmethod
+  def remaining(self) -> int:
+    raise NotImplementedError
+
+  @abstractmethod
+  def reset(self):
+    raise NotImplementedError
+
 class MNISTIterator(ImageIterator):
   def __init__(self, images: np.ndarray, labels: np.ndarray):
     self.images = images
@@ -250,6 +267,12 @@ class MNISTIterator(ImageIterator):
     retval = self.images[self.index], self.labels[self.index]
     self.index += 1
     return retval
+
+  def remaining(self) -> int:
+    return len(self.images) - self.index
+
+  def reset(self):
+    self.index = 0
 
 def MNISTTrainIterator() -> ImageIterator:
   """
