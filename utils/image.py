@@ -224,8 +224,8 @@ def _test_load_mnist_images():
   """
   Tests the load_mnist_images function.
   """
-  images = load_mnist_images('../datasets/mnist/t10k-images.idx3-ubyte.gz')
-  labels = load_mnist_labels('../datasets/mnist/t10k-labels.idx1-ubyte.gz')
+  images = load_mnist_images('../datasets/mnist/train-images.idx3-ubyte.gz')
+  labels = load_mnist_labels('../datasets/mnist/train-labels.idx1-ubyte.gz')
   print(images.shape)
   print(labels.shape)
 
@@ -234,3 +234,4 @@ def _test_load_mnist_images():
 
 if __name__ == '__main__':
   _test_load_mnist_images()
+
