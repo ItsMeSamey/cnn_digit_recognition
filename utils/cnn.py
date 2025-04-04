@@ -1,9 +1,10 @@
 from abc import ABCMeta, abstractmethod
+import time
 from typing import Callable
 import numpy as np
 import pickle
 
-from functions import ActivationFunction, Sigmoid, cross_entropy, cross_entropy_derivative, softmax, softmax_derivative
+from functions import ActivationFunction, ReLU,  Softmax,  cross_entropy, cross_entropy_derivative
 from image import ImageIterator, MNISTTrainIterator
 
 class ConvolutionalLayer(metaclass=ABCMeta):
@@ -11,20 +12,15 @@ class ConvolutionalLayer(metaclass=ABCMeta):
   def convolve(self, image: np.ndarray) -> np.ndarray:
     raise NotImplementedError
 
-  @abstractmethod
-  # should randomly initialize the kernel
   def reset_kernel(self):
-    raise NotImplementedError
+    self.kernel = np.random.randn(self.kernel.shape[0], self.kernel.shape[1])
 
-  @abstractmethod
-  # returns the kernel of this layer
-  def get_kernel(self) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
-    raise NotImplementedError
+  def reset_bias(self):
+    self.bias = np.zeros(self.bias.shape[0])
 
-  @abstractmethod
-  # set the kernel to the given value
-  def set_kernel(self, kernel: np.ndarray):
-    raise NotImplementedError
+  def reset(self):
+    self.reset_kernel()
+    self.reset_bias()
 
 class NeuronLayer():
   def __init__(self, weights: np.ndarray, bias: np.ndarray, activation: ActivationFunction):
@@ -34,6 +30,7 @@ class NeuronLayer():
 
   def reset_weights(self):
     self.weights = np.random.randn(self.weights.shape[0], self.weights.shape[1])
+    self.weights /= np.max(np.abs(self.weights))
 
   def reset_bias(self):
     self.bias = np.zeros(self.bias.shape[0])
@@ -43,17 +40,20 @@ class NeuronLayer():
     self.reset_bias()
 
   def activate(self, data: np.ndarray) -> np.ndarray:
+    print(f"Output: {np.dot(data, self.weights) + self.bias}")
+    print(f"Activation: {self.activation_function(np.dot(data, self.weights) + self.bias)}")
     return self.activation_function(np.dot(data, self.weights) + self.bias)
 
-  # 
-  def update_weights(self, input: np.ndarray, derivative: np.ndarray, output: np.ndarray, learning_rate: float) -> np.ndarray:
+  def update_weights(self, input: np.ndarray, derivative: np.ndarray, learning_rate: float) -> np.ndarray:
     """
     Updates the weights of this layer, returns the derivative for prior layer.
     """
-    weights_delta = np.dot(output.T, derivative)
+    weights_delta = np.outer(input, derivative)
+
     self.weights -= learning_rate * weights_delta
     self.bias -= learning_rate * derivative
-    return self.activation_function.derivative(input) * np.dot(derivative, self.weights)
+
+    return self.activation_function.derivative(input) + np.dot(self.weights, derivative)
 
 class CNN():
   def __init__(self, convolution_layers: list[ConvolutionalLayer], neural_net: list[NeuronLayer]):
@@ -67,20 +67,22 @@ class CNN():
   def load(cls, data: bytes) -> 'CNN':
     return pickle.loads(data)
 
+  def reset(self):
+    for layer in self.convolution_layers: layer.reset()
+    for layer in self.neural_net: layer.reset()
+
   def forward(self, image: np.ndarray) -> np.ndarray:
     for layer in self.convolution_layers: image = layer.convolve(image)
     data = image.reshape(-1)
     for layer in self.neural_net: data = layer.activate(data)
-    return softmax(data)
-
-  def reset(self):
-    for layer in self.convolution_layers: layer.reset_kernel()
-    for layer in self.neural_net: layer.reset_weights()
+    return data
 
   def train(self, iter: ImageIterator, learning_rate: Callable[['CNN', int], float], verbose: bool = True):
     n = 0
     while iter.has_next():
+      time.sleep(0.1)
       image, label = iter.next()
+      image = np.array(image, dtype=np.float32) / 255
       for cn in self.convolution_layers:
         image = cn.convolve(image)
       data = image.reshape(-1)
@@ -89,9 +91,6 @@ class CNN():
       for nl in self.neural_net:
         deepnet_inputs.append(data)
         data = nl.activate(data)
-
-      softmax_input = data
-      data = softmax(data)
 
       loss_input = data
       expected = np.zeros(10)
@@ -103,12 +102,9 @@ class CNN():
       n += 1
 
       derivative = cross_entropy_derivative(expected, loss_input)
-      derivative = softmax_derivative(softmax_input) * derivative
-      output = softmax_input
       for nl in reversed(self.neural_net):
         input = deepnet_inputs.pop()
-        derivative = nl.update_weights(input, derivative, output, lr)
-        output = input
+        derivative = nl.update_weights(input, derivative, lr)
 
 
 def _test_cnn():
@@ -116,14 +112,15 @@ def _test_cnn():
   Tests the CNN class.
   """
   cnn = CNN([], [
-    NeuronLayer(np.zeros((28*28, 32)), np.zeros((28*28, 32)), Sigmoid()),
-    NeuronLayer(np.zeros((32, 10)), np.zeros((32, 10)), Sigmoid()),
-    NeuronLayer(np.zeros((10, 10)), np.zeros((10, 10)), Sigmoid()),
+    NeuronLayer(np.zeros((28*28, 32)), np.zeros((32)), ReLU()),
+    NeuronLayer(np.zeros((32, 16)), np.zeros((16)), ReLU()),
+    # NeuronLayer(np.zeros((16, 16)), np.zeros((16)), Sigmoid()),
+    NeuronLayer(np.zeros((16, 10)), np.zeros((10)), Softmax()),
   ])
 
   cnn.reset()
 
-  cnn.train(MNISTTrainIterator(), lambda cnn, i: 0.1, verbose=True)
+  cnn.train(MNISTTrainIterator(), lambda cnn, i: 0.001, verbose=True)
 
 if __name__ == '__main__':
   _test_cnn()
