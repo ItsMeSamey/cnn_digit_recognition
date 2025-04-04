@@ -1,6 +1,9 @@
 from abc import ABCMeta, abstractmethod
+from typing import Callable
 import numpy as np
 import pickle
+
+from utils.functions import softmax
 
 class ConvolutionalLayer(metaclass=ABCMeta):
   @abstractmethod
@@ -42,6 +45,15 @@ class FullyConnectedLayer(metaclass=ABCMeta):
   # def set_weights(self, weights: np.ndarray):
   #   raise NotImplementedError
 
+class ImageIterator(metaclass=ABCMeta):
+  @abstractmethod
+  def has_next(self) -> bool:
+    raise NotImplementedError
+
+  @abstractmethod
+  def next(self) -> tuple[np.ndarray, int]:
+    raise NotImplementedError
+
 class CNN():
   def __init__(self, convolution_layers: list[ConvolutionalLayer], neural_net: list[FullyConnectedLayer]):
     self.convolution_layers = convolution_layers
@@ -58,6 +70,9 @@ class CNN():
     for layer in self.convolution_layers: image = layer.convolve(image)
     data = image.reshape(-1)
     for layer in self.neural_net: data = layer.activate(data)
-    data = softmax(data)
-    return self._activate(self._convolve(image))
+    return softmax(data)
+
+  def train(self, iter: ImageIterator, learning_rate: Callable[['CNN', int], float], verbose: bool = True):
+    while iter.has_next():
+      image, label = iter.next()
 

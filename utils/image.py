@@ -2,6 +2,8 @@ from PIL import Image
 import numpy as np
 import math
 
+from utils.cnn import ImageIterator
+
 def load_image(path: str, width: int, height: int):
   """
   Reads an image in grayscale, downscales it while maintaining aspect ratio,
@@ -234,4 +236,36 @@ def _test_load_mnist_images():
 
 if __name__ == '__main__':
   _test_load_mnist_images()
+
+class MNISTIterator(ImageIterator):
+  def __init__(self, images: np.ndarray, labels: np.ndarray):
+    self.images = images
+    self.labels = labels
+    self.index = 0
+
+  def has_next(self) -> bool:
+    return self.index < len(self.images)
+
+  def next(self) -> tuple[np.ndarray, int]:
+    retval = self.images[self.index], self.labels[self.index]
+    self.index += 1
+    return retval
+
+def MNISTTrainIterator() -> ImageIterator:
+  """
+  Returns an iterator over the training set of the MNIST dataset.
+
+  Returns:
+    An iterator over the training set of the MNIST dataset.
+  """
+  return MNISTIterator(load_mnist_images('../datasets/mnist/train-images.idx3-ubyte.gz'), load_mnist_labels('../datasets/mnist/train-labels.idx1-ubyte.gz'))
+
+def MNISTTestIterator() -> ImageIterator:
+  """
+  Returns an iterator over the test set of the MNIST dataset.
+
+  Returns:
+    An iterator over the test set of the MNIST dataset.
+  """
+  return MNISTIterator(load_mnist_images('../datasets/mnist/t10k-images.idx3-ubyte.gz'), load_mnist_labels('../datasets/mnist/t10k-labels.idx1-ubyte.gz'))
 

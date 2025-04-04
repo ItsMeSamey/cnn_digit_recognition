@@ -34,7 +34,7 @@ def relu(val: float) -> float:
   return max(0, val)
 
 def relu_derivative(val: float) -> float:
-  return 1 if val > 0 else 0
+  return val > 0
 
 def tanh(val: float) -> float:
   return math.tanh(val)
